@@ -1,243 +1,196 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
+import { CartDrawer } from "@/components/products/cart-drawer";
+import { CartPanel } from "@/components/products/cart-panel";
+import { ProductDetailPanel } from "@/components/products/product-detail-panel";
+import { ProductDetailSheet } from "@/components/products/product-detail-sheet";
+import { ProductListView } from "@/components/products/product-list-view";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardContent,
-  CardDescription,
   CardHeader,
+  CardDescription,
   CardTitle,
 } from "@/components/ui/card";
-
-type Food = {
-  id: string;
-  name: string;
-  category: string;
-  servingHint: string;
-  nutritionPer100g: {
-    calories: number;
-    carbs: number;
-    protein: number;
-    fat: number;
-    sugar: number;
-    sodium: number;
-  };
-};
-
-const foods: Food[] = [
-  {
-    id: "chicken-breast",
-    name: "닭가슴살",
-    category: "단백질",
-    servingHint: "100~150g",
-    nutritionPer100g: {
-      calories: 165,
-      carbs: 0,
-      protein: 31,
-      fat: 3.6,
-      sugar: 0,
-      sodium: 74,
-    },
-  },
-  {
-    id: "brown-rice",
-    name: "현미밥",
-    category: "탄수화물",
-    servingHint: "150~210g",
-    nutritionPer100g: {
-      calories: 111,
-      carbs: 23,
-      protein: 2.6,
-      fat: 0.9,
-      sugar: 0.4,
-      sodium: 5,
-    },
-  },
-  {
-    id: "avocado",
-    name: "아보카도",
-    category: "건강한 지방",
-    servingHint: "70~100g",
-    nutritionPer100g: {
-      calories: 160,
-      carbs: 8.5,
-      protein: 2,
-      fat: 14.7,
-      sugar: 0.7,
-      sodium: 7,
-    },
-  },
-  {
-    id: "broccoli",
-    name: "브로콜리",
-    category: "채소",
-    servingHint: "80~120g",
-    nutritionPer100g: {
-      calories: 34,
-      carbs: 6.6,
-      protein: 2.8,
-      fat: 0.4,
-      sugar: 1.7,
-      sodium: 33,
-    },
-  },
-  {
-    id: "salmon",
-    name: "연어",
-    category: "단백질",
-    servingHint: "100~150g",
-    nutritionPer100g: {
-      calories: 208,
-      carbs: 0,
-      protein: 20,
-      fat: 13,
-      sugar: 0,
-      sodium: 59,
-    },
-  },
-  {
-    id: "apple",
-    name: "사과",
-    category: "과일",
-    servingHint: "120~180g",
-    nutritionPer100g: {
-      calories: 52,
-      carbs: 13.8,
-      protein: 0.3,
-      fat: 0.2,
-      sugar: 10.4,
-      sodium: 1,
-    },
-  },
-];
-
-function round(value: number) {
-  return Number(value.toFixed(1));
-}
-
-function statLabel(key: keyof Food["nutritionPer100g"]) {
-  if (key === "calories") return "칼로리";
-  if (key === "carbs") return "탄수화물";
-  if (key === "protein") return "단백질";
-  if (key === "fat") return "지방";
-  if (key === "sugar") return "당류";
-  return "나트륨";
-}
-
-function unitLabel(key: keyof Food["nutritionPer100g"]) {
-  if (key === "calories") return "kcal";
-  if (key === "sodium") return "mg";
-  return "g";
-}
+import { useCart } from "@/hooks/use-cart";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { useProductsViewModel } from "@/hooks/use-products-view-model";
+import { toNumber } from "@/lib/products/nutrition";
+import type { Product } from "@/lib/products/types";
+import { supabase } from "@/lib/supabase/client";
 
 export default function Home() {
-  const [selectedFoodId, setSelectedFoodId] = useState(foods[0].id);
-  const [servingGram, setServingGram] = useState(120);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
-  const selectedFood = useMemo(
-    () => foods.find((food) => food.id === selectedFoodId) ?? foods[0],
-    [selectedFoodId],
+  const isMobile = useMediaQuery("(max-width: 1023px)");
+
+  useEffect(() => {
+    async function fetchProducts() {
+      setLoading(true);
+      setErrorMessage(null);
+
+      if (!supabase) {
+        setErrorMessage(
+          "Supabase 환경변수가 없습니다. NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY (또는 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY)를 설정해주세요.",
+        );
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("foods")
+        .select(
+          "id, company_name, product_name, weight_g, calories, fat, saturated_fat, carbs, dietary_fiber, sugar, protein, sodium, caffeine, category, note",
+        )
+        .order("company_name", { ascending: true })
+        .order("product_name", { ascending: true });
+
+      if (error) {
+        setErrorMessage(error.message);
+        setLoading(false);
+        return;
+      }
+
+      const normalized: Product[] = (data ?? []).map((row) => ({
+        id: row.id,
+        company_name: row.company_name,
+        product_name: row.product_name,
+        weight_g: toNumber(row.weight_g),
+        calories: toNumber(row.calories),
+        fat: toNumber(row.fat),
+        saturated_fat: toNumber(row.saturated_fat),
+        carbs: toNumber(row.carbs),
+        dietary_fiber: toNumber(row.dietary_fiber),
+        sugar: toNumber(row.sugar),
+        protein: toNumber(row.protein),
+        sodium: toNumber(row.sodium),
+        caffeine: toNumber(row.caffeine),
+        category: row.category ?? "",
+        note: row.note,
+      }));
+
+      setProducts(normalized);
+      setLoading(false);
+    }
+
+    fetchProducts();
+  }, []);
+
+  const viewModel = useProductsViewModel(products);
+  const cart = useCart(products);
+
+  const effectiveSelectedProductId = useMemo(() => {
+    if (viewModel.visibleProducts.length === 0) return null;
+    const stillVisible = viewModel.visibleProducts.some(
+      (product) => product.id === selectedProductId,
+    );
+    return stillVisible ? selectedProductId : viewModel.visibleProducts[0].id;
+  }, [selectedProductId, viewModel.visibleProducts]);
+
+  const selectedProduct = useMemo(
+    () =>
+      products.find((product) => product.id === effectiveSelectedProductId) ??
+      null,
+    [effectiveSelectedProductId, products],
   );
 
-  const nutritionForServing = useMemo(() => {
-    const ratio = servingGram / 100;
+  const handleSelectProduct = (productId: string) => {
+    setSelectedProductId(productId);
+    if (isMobile) setMobileDetailOpen(true);
+  };
 
-    return Object.fromEntries(
-      Object.entries(selectedFood.nutritionPer100g).map(([key, value]) => [
-        key,
-        round(value * ratio),
-      ]),
-    ) as Food["nutritionPer100g"];
-  }, [selectedFood, servingGram]);
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900 md:px-10">
+        <main className="mx-auto w-full max-w-7xl">
+          <Card>
+            <CardHeader>
+              <CardTitle>데이터 불러오는 중</CardTitle>
+              <CardDescription>
+                Supabase foods 테이블을 조회하고 있습니다.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
-  const nutritionKeys = Object.keys(
-    selectedFood.nutritionPer100g,
-  ) as Array<keyof Food["nutritionPer100g"]>;
+  if (errorMessage) {
+    return (
+      <div className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900 md:px-10">
+        <main className="mx-auto w-full max-w-7xl">
+          <Card>
+            <CardHeader>
+              <CardTitle>연결 오류</CardTitle>
+              <CardDescription>{errorMessage}</CardDescription>
+            </CardHeader>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900 md:px-10">
-      <main className="mx-auto grid w-full max-w-6xl gap-6 md:grid-cols-[320px_1fr]">
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle>음식 선택</CardTitle>
-            <CardDescription>원하는 음식을 고르면 영양정보를 계산해줍니다.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {foods.map((food) => {
-              const isActive = food.id === selectedFoodId;
+    <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 md:px-10">
+      <main className="mx-auto grid w-full max-w-7xl gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <ProductListView
+          products={viewModel.visibleProducts}
+          selectedProductId={effectiveSelectedProductId}
+          onSelectProduct={handleSelectProduct}
+          onAddToCart={cart.add}
+          searchInput={viewModel.searchInput}
+          onSearchInputChange={viewModel.setSearchInput}
+          sort={viewModel.state.sort}
+          sortOptions={viewModel.sortOptions}
+          onSortChange={viewModel.setSort}
+          brandOptions={viewModel.options.brands}
+          categoryOptions={viewModel.options.categories}
+          selectedBrands={viewModel.state.brands}
+          selectedCategories={viewModel.state.categories}
+          onToggleBrand={viewModel.toggleBrand}
+          onToggleCategory={viewModel.toggleCategory}
+          onClearBrands={viewModel.clearBrands}
+          onClearCategories={viewModel.clearCategories}
+          onResetFilters={viewModel.resetFilters}
+          onResetAll={viewModel.resetAll}
+        />
 
-              return (
-                <Button
-                  key={food.id}
-                  variant={isActive ? "default" : "outline"}
-                  onClick={() => setSelectedFoodId(food.id)}
-                  className="flex h-auto w-full items-center justify-between gap-3 px-3 py-3"
-                >
-                  <span className="text-left text-sm">{food.name}</span>
-                  <Badge className={isActive ? "bg-white/20 text-white" : ""}>
-                    {food.category}
-                  </Badge>
-                </Button>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <CardTitle>{selectedFood.name}</CardTitle>
-                <CardDescription>
-                  권장 1회 섭취량: {selectedFood.servingHint}
-                </CardDescription>
-              </div>
-              <Badge>{selectedFood.category}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="mb-3 flex items-end justify-between">
-                <p className="text-sm font-medium text-slate-700">섭취량</p>
-                <p className="text-2xl font-bold">{servingGram}g</p>
-              </div>
-              <input
-                className="w-full accent-slate-900"
-                type="range"
-                min={30}
-                max={350}
-                step={10}
-                value={servingGram}
-                onChange={(event) => setServingGram(Number(event.target.value))}
-              />
-            </section>
-
-            <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {nutritionKeys.map((key) => (
-                <div
-                  key={key}
-                  className="rounded-xl border border-slate-200 bg-white p-4"
-                >
-                  <p className="text-sm text-slate-500">{statLabel(key)}</p>
-                  <p className="mt-1 text-2xl font-semibold">
-                    {nutritionForServing[key]}
-                    <span className="ml-1 text-base font-medium text-slate-500">
-                      {unitLabel(key)}
-                    </span>
-                  </p>
-                </div>
-              ))}
-            </section>
-
-            <section className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-              수치는 대략적인 참고용이며 조리법/브랜드에 따라 달라질 수 있습니다.
-            </section>
-          </CardContent>
-        </Card>
+        <aside className="sticky top-4 hidden self-start space-y-4 lg:block">
+          <ProductDetailPanel product={selectedProduct} />
+          <CartPanel cart={cart} />
+        </aside>
       </main>
+
+      <div className="fixed bottom-4 right-4 z-30 lg:hidden">
+        <Button
+          className="h-12 rounded-full px-4 shadow-lg"
+          onClick={() => setMobileCartOpen(true)}
+          aria-label="장바구니 열기"
+        >
+          장바구니 {cart.itemCount}
+        </Button>
+      </div>
+
+      <ProductDetailSheet
+        open={mobileDetailOpen}
+        product={selectedProduct}
+        onClose={() => setMobileDetailOpen(false)}
+      />
+      <CartDrawer
+        open={mobileCartOpen}
+        onClose={() => setMobileCartOpen(false)}
+        cart={cart}
+      />
     </div>
   );
 }

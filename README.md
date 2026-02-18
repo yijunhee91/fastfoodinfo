@@ -20,6 +20,17 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Product UI Usage
+
+- Search: use the product name input at the top of the list. It uses a 250ms debounce and syncs to `?q=...`.
+- Filter: use brand/category checkboxes in the sticky filter area. Multi-select is supported and syncs to repeated query params (`?brand=A&brand=B&category=Burger`).
+- Sort: choose one of the nutrition sort options from the dropdown. It syncs to `?sort=...`.
+- Combination: search/filter/sort are combined together and survive refresh/share via URL query string.
+- Cart: click `담기` on any product row, then adjust quantities (`+/-`) in cart panel/drawer. Cart totals (kcal/protein/carbs/fat/sodium) are persisted in localStorage.
+- Responsive detail:
+  - Desktop: split view with sticky right detail panel.
+  - Mobile: tap a product row to open nutrition detail sheet; press `ESC` or `닫기` to close.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
