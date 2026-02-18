@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nutri Pick",
-  description: "음식을 선택해 영양정보와 칼로리를 확인하는 웹앱",
+  title: "FastFoodInfo",
+  description: "패스트푸드 제조업체들 탄수랑 지방 안알려줘서 열받아서 만든 앱",
 };
 
 export default function RootLayout({
